@@ -1,5 +1,5 @@
 {CompositeDisposable, BufferedProcess} = require 'atom'
-{spawnSync} = require 'child_process'
+{exec, spawnSync} = require 'child_process'
 which = require 'which'
 path = require 'path'
 fs = require 'fs-plus'
@@ -103,21 +103,26 @@ class RubocopAutoCorrect
           ''' }
         )
 
-      rubocop = spawnSync(command, args, options)
+    rubocop = exec(commandWithArgs.join(' '), options,
+      (error, stdout, stderr) ->
+        if error
+          console.error(error) if debug
+          return atom.notifications.addFatalError(
+            "Rubocop command execution failuer.", )
+        if stderr != ""
+          console.error(stderr) if debug
+          atom.notifications.addError(stderr) if notification
 
-      if rubocop.stderr != ""
-        console.error(rubocop.stderr) if debug
-        atom.notifications.addError(rubocop.stderr) if notification
-
-      if rubocop.stdout.match("corrected")
-        buffer.setTextViaDiff(fs.readFileSync(tempFilePath, 'utf-8'))
-        if notification || debug
-          re = /^.+?(:[0-9]+:[0-9]+:.*$)/mg
-          offenses = rubocop.stdout.match(re)
-          offenses.map (offense) ->
-            message = offense.replace(re, buffer.getBaseName() + "$1")
-            console.log(message) if debug
-            atom.notifications.addSuccess(message) if notification
+        if stdout.match("corrected")
+          buffer.setTextViaDiff(fs.readFileSync(tempFilePath, 'utf-8'))
+          if notification || debug
+            re = /^.+?(:[0-9]+:[0-9]+:.*$)/mg
+            offenses = stdout.match(re)
+            offenses.map (offense) ->
+              message = offense.replace(re, buffer.getBaseName() + "$1")
+              console.log(message) if debug
+              atom.notifications.addSuccess(message) if notification
+      )
 
   autoCorrectFile: (filePath)  ->
     commandWithArgs = atom.config.get('rubocop-auto-correct.rubocopCommandPath')
